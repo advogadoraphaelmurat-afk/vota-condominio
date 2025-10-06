@@ -1,4 +1,5 @@
-'client';
+'use client';
+
 import React, { useState } from 'react';
 import { Bell, Pin, Calendar, AlertTriangle, Wrench, PartyPopper, MessageSquare, Eye, EyeOff, X, Check, Plus, Edit, FileText, Download } from 'lucide-react';
 
@@ -10,7 +11,7 @@ const NoticeBoardSystem = () => {
   const [showForm, setShowForm] = useState(false);
 
   // Dados mockados
-  const avisos = [
+  const [avisos, setAvisos] = useState([
     {
       id: 1,
       tipo: 'urgente',
@@ -91,7 +92,7 @@ const NoticeBoardSystem = () => {
       leituras: 102,
       totalMoradores: 120
     }
-  ];
+  ]);
 
   const tiposConfig = {
     aviso: { label: 'Aviso Geral', icon: MessageSquare, cor: 'text-blue-600', bg: 'bg-blue-100', bgDark: 'bg-blue-600' },
@@ -126,8 +127,9 @@ const NoticeBoardSystem = () => {
   const avisosNaoLidos = avisos.filter(a => !a.lido).length;
 
   const marcarComoLido = (avisoId) => {
-    // Lógica de marcar como lido
-    console.log('Marcar como lido:', avisoId);
+    setAvisos(avisos.map(aviso => 
+      aviso.id === avisoId ? { ...aviso, lido: true } : aviso
+    ));
   };
 
   const AvisoCard = ({ aviso, compact = false }) => {
@@ -458,3 +460,4 @@ const NoticeBoardSystem = () => {
 };
 
 export default NoticeBoardSystem;
+
