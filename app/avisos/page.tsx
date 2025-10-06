@@ -1,7 +1,6 @@
-'client'
-
+'client';
 import React, { useState } from 'react';
-import { Bell, Pin, Calendar, AlertTriangle, Wrench, PartyPopper, MessageSquare, Eye, EyeOff, X, Check, Plus, Edit } from 'lucide-react';
+import { Bell, Pin, Calendar, AlertTriangle, Wrench, PartyPopper, MessageSquare, Eye, EyeOff, X, Check, Plus, Edit, FileText, Download } from 'lucide-react';
 
 const NoticeBoardSystem = () => {
   const [userRole, setUserRole] = useState('morador'); // 'morador' | 'sindico'
