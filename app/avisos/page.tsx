@@ -3,15 +3,53 @@
 import React, { useState } from 'react';
 import { Bell, Pin, Calendar, AlertTriangle, Wrench, PartyPopper, MessageSquare, Eye, EyeOff, X, Check, Plus, Edit, FileText, Download } from 'lucide-react';
 
+// Definindo tipos
+type UserRole = 'morador' | 'sindico';
+type TipoAviso = 'aviso' | 'convocacao' | 'urgente' | 'manutencao' | 'evento';
+type Prioridade = 'baixa' | 'media' | 'alta' | 'critica';
+type StatusLeitura = 'lido' | 'nao_lido';
+
+interface Aviso {
+  id: number;
+  tipo: TipoAviso;
+  titulo: string;
+  conteudo: string;
+  prioridade: Prioridade;
+  dataPublicacao: string;
+  dataExpiracao: string | null;
+  fixado: boolean;
+  confirmacaoLeitura: boolean;
+  sindicoNome: string;
+  anexos: string[];
+  lido: boolean;
+  leituras: number;
+  totalMoradores: number;
+}
+
+interface TipoConfig {
+  label: string;
+  icon: React.ComponentType<any>;
+  cor: string;
+  bg: string;
+  bgDark: string;
+}
+
+interface PrioridadeConfig {
+  label: string;
+  cor: string;
+  bg: string;
+  pulse?: boolean;
+}
+
 const NoticeBoardSystem = () => {
-  const [userRole, setUserRole] = useState('morador'); // 'morador' | 'sindico'
-  const [filterType, setFilterType] = useState('todos');
-  const [showUnreadOnly, setShowUnreadOnly] = useState(false);
-  const [selectedAviso, setSelectedAviso] = useState(null);
-  const [showForm, setShowForm] = useState(false);
+  const [userRole, setUserRole] = useState<UserRole>('morador');
+  const [filterType, setFilterType] = useState<string>('todos');
+  const [showUnreadOnly, setShowUnreadOnly] = useState<boolean>(false);
+  const [selectedAviso, setSelectedAviso] = useState<Aviso | null>(null);
+  const [showForm, setShowForm] = useState<boolean>(false);
 
   // Dados mockados
-  const [avisos, setAvisos] = useState([
+  const [avisos, setAvisos] = useState<Aviso[]>([
     {
       id: 1,
       tipo: 'urgente',
@@ -94,7 +132,7 @@ const NoticeBoardSystem = () => {
     }
   ]);
 
-  const tiposConfig = {
+  const tiposConfig: Record<TipoAviso, TipoConfig> = {
     aviso: { label: 'Aviso Geral', icon: MessageSquare, cor: 'text-blue-600', bg: 'bg-blue-100', bgDark: 'bg-blue-600' },
     convocacao: { label: 'Convocação', icon: Bell, cor: 'text-purple-600', bg: 'bg-purple-100', bgDark: 'bg-purple-600' },
     urgente: { label: 'Urgente', icon: AlertTriangle, cor: 'text-red-600', bg: 'bg-red-100', bgDark: 'bg-red-600' },
@@ -102,7 +140,7 @@ const NoticeBoardSystem = () => {
     evento: { label: 'Evento', icon: PartyPopper, cor: 'text-green-600', bg: 'bg-green-100', bgDark: 'bg-green-600' }
   };
 
-  const prioridadesConfig = {
+  const prioridadesConfig: Record<Prioridade, PrioridadeConfig> = {
     baixa: { label: 'Baixa', cor: 'text-gray-600', bg: 'bg-gray-100' },
     media: { label: 'Média', cor: 'text-yellow-600', bg: 'bg-yellow-100' },
     alta: { label: 'Alta', cor: 'text-orange-600', bg: 'bg-orange-100' },
@@ -116,23 +154,23 @@ const NoticeBoardSystem = () => {
       // Fixados primeiro
       if (a.fixado !== b.fixado) return a.fixado ? -1 : 1;
       // Depois por prioridade
-      const prioridadeOrder = { critica: 0, alta: 1, media: 2, baixa: 3 };
+      const prioridadeOrder: Record<Prioridade, number> = { critica: 0, alta: 1, media: 2, baixa: 3 };
       if (a.prioridade !== b.prioridade) {
         return prioridadeOrder[a.prioridade] - prioridadeOrder[b.prioridade];
       }
       // Por último, mais recente primeiro
-      return new Date(b.dataPublicacao) - new Date(a.dataPublicacao);
+      return new Date(b.dataPublicacao).getTime() - new Date(a.dataPublicacao).getTime();
     });
 
   const avisosNaoLidos = avisos.filter(a => !a.lido).length;
 
-  const marcarComoLido = (avisoId) => {
+  const marcarComoLido = (avisoId: number) => {
     setAvisos(avisos.map(aviso => 
       aviso.id === avisoId ? { ...aviso, lido: true } : aviso
     ));
   };
 
-  const AvisoCard = ({ aviso, compact = false }) => {
+  const AvisoCard = ({ aviso, compact = false }: { aviso: Aviso; compact?: boolean }) => {
     const tipoInfo = tiposConfig[aviso.tipo];
     const prioridadeInfo = prioridadesConfig[aviso.prioridade];
     const Icon = tipoInfo.icon;
@@ -285,6 +323,7 @@ const NoticeBoardSystem = () => {
               return (
                 <button
                   key={key}
+                  type="button"
                   className={`p-4 border-2 rounded-lg hover:border-blue-500 transition-all`}
                 >
                   <Icon className={config.cor} size={24} />
@@ -356,12 +395,16 @@ const NoticeBoardSystem = () => {
         {/* Botões */}
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={() => setShowForm(false)}
             className="flex-1 px-6 py-3 border-2 border-gray-300 text-gray-700 rounded-lg font-semibold hover:bg-gray-50"
           >
             Cancelar
           </button>
-          <button className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700">
+          <button 
+            type="button"
+            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700"
+          >
             Publicar Aviso
           </button>
         </div>
@@ -395,6 +438,7 @@ const NoticeBoardSystem = () => {
 
             {userRole === 'sindico' && !showForm && (
               <button
+                type="button"
                 onClick={() => setShowForm(true)}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 flex items-center gap-2"
               >
@@ -423,6 +467,7 @@ const NoticeBoardSystem = () => {
               </select>
 
               <button
+                type="button"
                 onClick={() => setShowUnreadOnly(!showUnreadOnly)}
                 className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                   showUnreadOnly
@@ -460,4 +505,3 @@ const NoticeBoardSystem = () => {
 };
 
 export default NoticeBoardSystem;
-
