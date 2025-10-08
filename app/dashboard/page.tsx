@@ -1,450 +1,337 @@
-'use client';
+'use client'
 
-import React, { useState } from 'react';
-import { Home, Vote, Bell, MessageCircle, Users, BarChart3, Settings, Menu, X, AlertCircle, Pin, TrendingUp } from 'lucide-react';
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { createSupabaseClient, getCondominioAtivo } from '@/lib/supabase'
+import AvisosDashboard from '@/components/AvisosDashboard'
+import VotacoesDashboard from '@/components/VotacoesDashboard'
+import ComunicacoesDashboard from '@/components/ComunicacoesDashboard'
 
-// Definindo tipos TypeScript
-type UserRole = 'morador' | 'sindico' | 'super_admin';
-type MenuItem = {
-  id: string;
-  label: string;
-  icon: React.ComponentType<any>;
-  badge: number | null;
-};
-type AvisoFixado = {
-  id: number;
-  tipo: string;
-  titulo: string;
-  resumo: string;
-  prioridade: string;
-};
-type AvisoRecente = {
-  titulo: string;
-  tipo: string;
-  lido: boolean;
-};
+interface Usuario {
+  id: string
+  email: string
+  nome_completo: string
+  role: string
+}
 
-const IntegratedDashboard = () => {
-  const [activeSection, setActiveSection] = useState('dashboard');
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [userRole] = useState<UserRole>('morador'); // 'morador' | 'sindico' | 'super_admin'
+interface Condominio {
+  id: string
+  nome: string
+  cnpj?: string
+  endereco?: string
+}
 
-  // Contadores de notificações
-  const notificacoes = {
-    votacoesAtivas: 3,
-    avisosNaoLidos: 5,
-    comunicacoesNovas: 2,
-    moradoresPendentes: 4 // Apenas para síndico
-  };
+export default function DashboardPage() {
+  const router = useRouter()
+  const [usuario, setUsuario] = useState<Usuario | null>(null)
+  const [condominio, setCondominio] = useState<Condominio | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  // Avisos fixados para dashboard
-  const avisosFixados: AvisoFixado[] = [
-    {
-      id: 1,
-      tipo: 'urgente',
-      titulo: 'Manutenção Emergencial - Elevador 2',
-      resumo: 'Elevador 2 fora de operação até 18h de hoje',
-      prioridade: 'critica'
+  useEffect(() => {
+    checkAuth()
+  }, [])
+
+  const checkAuth = async () => {
+    try {
+      const supabase = createSupabaseClient()
+      
+      // Verificar sessão de autenticação
+      const { data: { user }, error: authError } = await supabase.auth.getUser()
+      
+      if (authError || !user) {
+        router.push('/login')
+        return
+      }
+
+      // Buscar dados completos do usuário
+      const { data: userData, error: userError } = await supabase
+        .from('usuarios')
+        .select('*')
+        .eq('auth_id', user.id)
+        .single()
+
+      if (userError || !userData) {
+        console.error('Erro ao buscar usuário:', userError)
+        router.push('/login')
+        return
+      }
+
+      setUsuario(userData)
+
+      // Buscar condomínio ativo
+      const vinculo = await getCondominioAtivo(userData.id)
+      
+      if (!vinculo) {
+        setLoading(false)
+        return
+      }
+
+      // Buscar dados do condomínio
+      const { data: condData, error: condError } = await supabase
+        .from('condominios')
+        .select('*')
+        .eq('id', vinculo.condominio_id)
+        .single()
+
+      if (condError) {
+        console.error('Erro ao buscar condomínio:', condError)
+        setLoading(false)
+        return
+      }
+
+      if (condData) {
+        setCondominio(condData)
+      }
+    } catch (error) {
+      console.error('Erro ao verificar autenticação:', error)
+      router.push('/login')
+    } finally {
+      setLoading(false)
     }
-  ];
+  }
 
-  // Menu de navegação
-  const menuItems: MenuItem[] = userRole === 'morador' ? [
-    { id: 'dashboard', label: 'Início', icon: Home, badge: null },
-    { id: 'votacoes', label: 'Votações', icon: Vote, badge: notificacoes.votacoesAtivas },
-    { id: 'avisos', label: 'Avisos', icon: Bell, badge: notificacoes.avisosNaoLidos },
-    { id: 'comunicacoes', label: 'Falar com Síndico', icon: MessageCircle, badge: notificacoes.comunicacoesNovas }
-  ] : [
-    { id: 'dashboard', label: 'Dashboard', icon: Home, badge: null },
-    { id: 'votacoes', label: 'Votações', icon: Vote, badge: null },
-    { id: 'comunicacoes', label: 'Comunicações', icon: MessageCircle, badge: notificacoes.comunicacoesNovas },
-    { id: 'avisos', label: 'Avisos', icon: Bell, badge: null },
-    { id: 'moradores', label: 'Moradores', icon: Users, badge: notificacoes.moradoresPendentes },
-    { id: 'relatorios', label: 'Relatórios', icon: BarChart3, badge: null }
-  ];
+  const handleLogout = async () => {
+    try {
+      const supabase = createSupabaseClient()
+      await supabase.auth.signOut()
+      router.push('/login')
+    } catch (error) {
+      console.error('Erro ao fazer logout:', error)
+    }
+  }
 
-  const DashboardMorador = () => (
-    <div className="space-y-6">
-      {/* Avisos Fixados/Urgentes */}
-      {avisosFixados.length > 0 && (
-        <div className="space-y-3">
-          {avisosFixados.map(aviso => (
-            <div key={aviso.id} className="bg-gradient-to-r from-red-500 to-red-600 rounded-xl p-6 text-white shadow-lg animate-pulse">
-              <div className="flex items-start gap-4">
-                <div className="bg-white bg-opacity-20 p-3 rounded-lg">
-                  <AlertCircle size={32} />
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Pin size={16} />
-                    <span className="text-xs font-bold uppercase">Aviso Urgente - Fixado</span>
-                  </div>
-                  <h3 className="text-xl font-bold mb-2">{aviso.titulo}</h3>
-                  <p className="text-white text-opacity-90">{aviso.resumo}</p>
-                  <button 
-                    type="button"
-                    className="mt-4 px-4 py-2 bg-white text-red-600 rounded-lg font-semibold hover:bg-opacity-90"
-                  >
-                    Ver Detalhes
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+  const getRoleLabel = (role: string) => {
+    switch (role) {
+      case 'sindico':
+        return '👔 Síndico'
+      case 'morador':
+        return '🏠 Morador'
+      case 'administradora':
+        return '🏢 Administradora'
+      case 'admin':
+        return '⚙️ Administrador'
+      default:
+        return '👤 Usuário'
+    }
+  }
 
-      {/* Cards de Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div 
-          className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => setActiveSection('votacoes')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Votações Ativas</h3>
-            <div className="bg-blue-100 p-3 rounded-lg">
-              <Vote className="text-blue-600" size={24} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-blue-600">{notificacoes.votacoesAtivas}</p>
-          <p className="text-sm text-gray-600 mt-2">Aguardando seu voto</p>
-        </div>
-
-        <div 
-          className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => setActiveSection('avisos')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Avisos Não Lidos</h3>
-            <div className="bg-amber-100 p-3 rounded-lg">
-              <Bell className="text-amber-600" size={24} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-amber-600">{notificacoes.avisosNaoLidos}</p>
-          <p className="text-sm text-gray-600 mt-2">Novidades importantes</p>
-        </div>
-
-        <div 
-          className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow cursor-pointer"
-          onClick={() => setActiveSection('comunicacoes')}
-        >
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Comunicações</h3>
-            <div className="bg-green-100 p-3 rounded-lg">
-              <MessageCircle className="text-green-600" size={24} />
-            </div>
-          </div>
-          <p className="text-3xl font-bold text-green-600">{notificacoes.comunicacoesNovas}</p>
-          <p className="text-sm text-gray-600 mt-2">Novas respostas</p>
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 text-lg">Carregando dashboard...</p>
         </div>
       </div>
+    )
+  }
 
-      {/* Seções Principais */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Votações Recentes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-900">Votações Ativas</h3>
-            <button 
-              type="button"
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-              onClick={() => setActiveSection('votacoes')}
-            >
-              Ver todas →
-            </button>
-          </div>
-          <div className="space-y-3">
-            {[1, 2, 3].map(i => (
-              <div 
-                key={i} 
-                className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
-                onClick={() => setActiveSection('votacoes')}
-              >
-                <h4 className="font-semibold text-gray-900 mb-1">Reforma da Piscina</h4>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Encerra em 2 dias</span>
-                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                    Pendente
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Avisos Recentes */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-gray-900">Avisos Recentes</h3>
-            <button 
-              type="button"
-              className="text-blue-600 hover:text-blue-700 text-sm font-medium"
-              onClick={() => setActiveSection('avisos')}
-            >
-              Ver todos →
-            </button>
-          </div>
-          <div className="space-y-3">
-            {[
-              { titulo: 'Limpeza da Caixa d\'Água', tipo: 'manutencao', lido: false },
-              { titulo: 'Festa das Crianças - 12/10', tipo: 'evento', lido: true },
-              { titulo: 'Novos Horários da Academia', tipo: 'aviso', lido: true }
-            ].map((aviso: AvisoRecente, i) => (
-              <div 
-                key={i} 
-                className="p-4 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
-                onClick={() => setActiveSection('avisos')}
-              >
-                <div className="flex items-center justify-between">
-                  <h4 className="font-semibold text-gray-900">{aviso.titulo}</h4>
-                  {!aviso.lido && (
-                    <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
-                  )}
-                </div>
-                <span className="text-xs text-gray-600 capitalize">{aviso.tipo}</span>
-              </div>
-            ))}
-          </div>
+  if (!usuario || !condominio) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md text-center">
+          <div className="text-yellow-500 text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">
+            Acesso Pendente
+          </h2>
+          <p className="text-gray-600 mb-6">
+            Você não está vinculado a nenhum condomínio. Entre em contato com o síndico para aprovar seu acesso.
+          </p>
+          <button
+            onClick={handleLogout}
+            className="w-full px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          >
+            Sair
+          </button>
         </div>
       </div>
-
-      {/* Banner de Ação */}
-      <div className="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-xl p-8 text-white">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-2xl font-bold mb-2">Participe das decisões!</h3>
-            <p className="text-blue-100 mb-4">
-              Sua opinião é importante para melhorar nosso condomínio
-            </p>
-            <button 
-              type="button"
-              className="px-6 py-3 bg-white text-blue-600 rounded-lg font-semibold hover:bg-opacity-90"
-              onClick={() => setActiveSection('votacoes')}
-            >
-              Ver Votações Pendentes
-            </button>
-          </div>
-          <Vote size={80} className="text-white opacity-20" />
-        </div>
-      </div>
-    </div>
-  );
-
-  const DashboardSindico = () => (
-    <div className="space-y-6">
-      {/* Métricas Principais */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Votações Ativas</h3>
-            <Vote className="text-blue-600" size={24} />
-          </div>
-          <p className="text-3xl font-bold text-gray-900">3</p>
-          <p className="text-sm text-gray-600 mt-2">Em andamento</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Comunicações</h3>
-            {notificacoes.comunicacoesNovas > 0 && (
-              <span className="bg-red-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                {notificacoes.comunicacoesNovas}
-              </span>
-            )}
-          </div>
-          <p className="text-3xl font-bold text-amber-600">{notificacoes.comunicacoesNovas}</p>
-          <p className="text-sm text-gray-600 mt-2">Pendentes</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Taxa de Leitura</h3>
-            <TrendingUp className="text-green-600" size={24} />
-          </div>
-          <p className="text-3xl font-bold text-green-600">87%</p>
-          <p className="text-sm text-gray-600 mt-2">Avisos lidos</p>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="font-semibold text-gray-700">Moradores</h3>
-            {notificacoes.moradoresPendentes > 0 && (
-              <span className="bg-amber-600 text-white text-xs font-bold px-2 py-1 rounded-full">
-                {notificacoes.moradoresPendentes}
-              </span>
-            )}
-          </div>
-          <p className="text-3xl font-bold text-gray-900">115</p>
-          <p className="text-sm text-gray-600 mt-2">{notificacoes.moradoresPendentes} aguardando</p>
-        </div>
-      </div>
-
-      {/* Ações Necessárias */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-        <h3 className="text-xl font-bold text-gray-900 mb-4">Ações Necessárias</h3>
-        <div className="space-y-3">
-          <div className="flex items-center gap-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <AlertCircle className="text-red-600" size={24} />
-            <div className="flex-1">
-              <p className="font-semibold text-red-900">2 comunicações urgentes sem resposta</p>
-              <p className="text-sm text-red-700">Requer atenção imediata</p>
-            </div>
-            <button 
-              type="button"
-              className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700"
-              onClick={() => setActiveSection('comunicacoes')}
-            >
-              Ver Agora
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <Users className="text-amber-600" size={24} />
-            <div className="flex-1">
-              <p className="font-semibold text-amber-900">4 moradores aguardando aprovação</p>
-              <p className="text-sm text-amber-700">Cadastros pendentes há 2+ dias</p>
-            </div>
-            <button 
-              type="button"
-              className="px-4 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700"
-              onClick={() => setActiveSection('moradores')}
-            >
-              Revisar
-            </button>
-          </div>
-
-          <div className="flex items-center gap-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <Bell className="text-blue-600" size={24} />
-            <div className="flex-1">
-              <p className="font-semibold text-blue-900">Aviso sobre piscina com baixa leitura</p>
-              <p className="text-sm text-blue-700">Apenas 45% dos moradores leram</p>
-            </div>
-            <button 
-              type="button"
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700"
-              onClick={() => setActiveSection('avisos')}
-            >
-              Reenviar
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
+    )
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+      <header className="bg-white shadow-sm border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <button
-                type="button"
-                onClick={() => setMenuOpen(!menuOpen)}
-                className="lg:hidden p-2 hover:bg-gray-100 rounded-lg"
-              >
-                {menuOpen ? <X size={24} /> : <Menu size={24} />}
-              </button>
-              <h1 className="text-xl font-bold text-gray-900">🗳️ VotaCondôminos</h1>
-            </div>
-
-            {/* Notificações */}
-            <div className="flex items-center gap-4">
-              <button 
-                type="button"
-                className="relative p-2 hover:bg-gray-100 rounded-lg"
-              >
-                <Bell size={24} className="text-gray-600" />
-                {(notificacoes.avisosNaoLidos + notificacoes.comunicacoesNovas) > 0 && (
-                  <span className="absolute top-1 right-1 w-5 h-5 bg-red-600 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                    {notificacoes.avisosNaoLidos + notificacoes.comunicacoesNovas}
-                  </span>
-                )}
-              </button>
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <p className="font-medium text-gray-900">João Silva</p>
-                  <p className="text-xs text-gray-600 capitalize">{userRole}</p>
-                </div>
-                <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-bold">
-                  JS
-                </div>
+              <div className="text-3xl">🏢</div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  {condominio.nome}
+                </h1>
+                <p className="text-sm text-gray-600">
+                  {getRoleLabel(usuario.role)} • {usuario.nome_completo}
+                </p>
               </div>
             </div>
+            <button
+              onClick={handleLogout}
+              className="px-4 py-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+            >
+              Sair
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside className={`${
-          menuOpen ? 'translate-x-0' : '-translate-x-full'
-        } lg:translate-x-0 fixed lg:sticky top-16 left-0 h-[calc(100vh-4rem)] w-64 bg-white border-r border-gray-200 transition-transform z-30`}>
-          <nav className="p-4 space-y-2">
-            {menuItems.map(item => {
-              const Icon = item.icon;
-              return (
-                <button
-                  type="button"
-                  key={item.id}
-                  onClick={() => {
-                    setActiveSection(item.id);
-                    setMenuOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition-colors ${
-                    activeSection === item.id
-                      ? 'bg-blue-600 text-white'
-                      : 'text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  <Icon size={20} />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  {item.badge !== null && item.badge > 0 && (
-                    <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                      activeSection === item.id
-                        ? 'bg-white text-blue-600'
-                        : 'bg-red-600 text-white'
-                    }`}>
-                      {item.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </nav>
-        </aside>
+      {/* Menu Lateral + Conteúdo */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className="flex gap-6">
+          {/* Sidebar - Menu de Navegação */}
+          <aside className="w-64 flex-shrink-0">
+            <nav className="bg-white rounded-lg shadow-sm p-4 space-y-2 sticky top-8">
+              <button
+                onClick={() => router.push('/dashboard')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-900 bg-blue-50 rounded-lg font-medium"
+              >
+                <span>🏠</span>
+                <span>Início</span>
+              </button>
+              
+              <button
+                onClick={() => router.push('/votacoes')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg font-medium"
+              >
+                <span>🗳️</span>
+                <span>Votações</span>
+                <span className="ml-auto bg-red-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                  3
+                </span>
+              </button>
+              
+              <button
+                onClick={() => router.push('/avisos')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg font-medium"
+              >
+                <span>📢</span>
+                <span>Avisos</span>
+                <span className="ml-auto bg-blue-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                  5
+                </span>
+              </button>
+              
+              <button
+                onClick={() => router.push('/comunicacoes')}
+                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg font-medium"
+              >
+                <span>💬</span>
+                <span>Falar com Síndico</span>
+                <span className="ml-auto bg-orange-500 text-white text-xs font-bold px-2 py-1 rounded-full">
+                  2
+                </span>
+              </button>
 
-        {/* Main Content */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8">
-          <div className="max-w-7xl mx-auto">
-            {activeSection === 'dashboard' && (
-              userRole === 'morador' ? <DashboardMorador /> : <DashboardSindico />
-            )}
-            
-            {activeSection !== 'dashboard' && (
-              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-                <p className="text-gray-600">
-                  Seção &quot;{activeSection}&quot; - Integrar componente correspondente aqui
+              {usuario.role === 'sindico' && (
+                <>
+                  <div className="border-t border-gray-200 my-2"></div>
+                  <button
+                    onClick={() => router.push('/sindico/dashboard')}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg font-medium"
+                  >
+                    <span>👔</span>
+                    <span>Painel do Síndico</span>
+                  </button>
+                </>
+              )}
+            </nav>
+          </aside>
+
+          {/* Conteúdo Principal */}
+          <main className="flex-1 space-y-6">
+            {/* Cards de Estatísticas */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Votações Ativas</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">3</p>
+                  </div>
+                  <div className="text-4xl">🗳️</div>
+                </div>
+                <p className="text-xs text-orange-600 mt-2">
+                  ⚠️ Você tem votações pendentes
                 </p>
               </div>
-            )}
-          </div>
-        </main>
+
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Avisos Novos</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">5</p>
+                  </div>
+                  <div className="text-4xl">📢</div>
+                </div>
+                <p className="text-xs text-blue-600 mt-2">
+                  ℹ️ 2 avisos fixados
+                </p>
+              </div>
+
+              <div className="bg-white rounded-lg shadow-sm p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-gray-600 text-sm">Mensagens</p>
+                    <p className="text-3xl font-bold text-gray-900 mt-1">2</p>
+                  </div>
+                  <div className="text-4xl">💬</div>
+                </div>
+                <p className="text-xs text-green-600 mt-2">
+                  ✓ Não lidas
+                </p>
+              </div>
+            </div>
+
+            {/* Componente de Votações */}
+            <VotacoesDashboard userId={usuario.id} />
+
+            {/* Grid de Avisos e Comunicações */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Componente de Avisos */}
+              <AvisosDashboard userId={usuario.id} />
+
+              {/* Componente de Comunicações */}
+              <ComunicacoesDashboard userId={usuario.id} />
+            </div>
+
+            {/* Acesso Rápido */}
+            <div className="bg-white rounded-lg shadow-sm p-6">
+              <h2 className="text-xl font-bold text-gray-900 mb-4">
+                ⚡ Acesso Rápido
+              </h2>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <button
+                  onClick={() => router.push('/votacoes')}
+                  className="p-4 text-center hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <div className="text-3xl mb-2">🗳️</div>
+                  <p className="text-sm font-medium text-gray-900">Votar</p>
+                </button>
+                <button
+                  onClick={() => router.push('/avisos')}
+                  className="p-4 text-center hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <div className="text-3xl mb-2">📢</div>
+                  <p className="text-sm font-medium text-gray-900">Avisos</p>
+                </button>
+                <button
+                  onClick={() => router.push('/comunicacoes')}
+                  className="p-4 text-center hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <div className="text-3xl mb-2">💬</div>
+                  <p className="text-sm font-medium text-gray-900">Mensagens</p>
+                </button>
+                <button
+                  onClick={() => router.push('/relatorios')}
+                  className="p-4 text-center hover:bg-gray-50 rounded-lg transition-colors"
+                >
+                  <div className="text-3xl mb-2">📊</div>
+                  <p className="text-sm font-medium text-gray-900">Relatórios</p>
+                </button>
+              </div>
+            </div>
+          </main>
+        </div>
       </div>
-
-      {/* Botão Flutuante (apenas para morador) */}
-      {userRole === 'morador' && (
-        <button
-          type="button"
-          onClick={() => setActiveSection('comunicacoes')}
-          className="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 flex items-center justify-center z-50"
-        >
-          <MessageCircle size={28} />
-        </button>
-      )}
     </div>
-  );
-};
-
-export default IntegratedDashboard;
+  )
+}
